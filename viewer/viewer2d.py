@@ -4,42 +4,43 @@ import json
 import os
 import numpy as np
 from numba import njit
-from scipy.spatial.transform import Rotation
 
 
 data_root = '/home/kemo/Dataset/sustechscapes-mini-dataset'
 
 
+@njit
 def euler_angle_to_rotate_matrix(eu, t):
     theta = eu
     # Calculate rotation about x axis
     R_x = np.array([
-        [1,       0,              0],
-        [0,       np.cos(theta[0]),   -np.sin(theta[0])],
-        [0,       np.sin(theta[0]),   np.cos(theta[0])]
+        [1,       0.,              0.],
+        [0.,      np.cos(theta[0]),   -np.sin(theta[0])],
+        [0.,      np.sin(theta[0]),   np.cos(theta[0])]
     ])
 
     # Calculate rotation about y axis
     R_y = np.array([
-        [np.cos(theta[1]),      0,      np.sin(theta[1])],
-        [0,                     1,      0],
-        [-np.sin(theta[1]),     0,      np.cos(theta[1])]
+        [np.cos(theta[1]),      0.,      np.sin(theta[1])],
+        [0.,                    1.,      0.],
+        [-np.sin(theta[1]),     0.,      np.cos(theta[1])]
     ])
 
     # Calculate rotation about z axis
     R_z = np.array([
-        [np.cos(theta[2]),    -np.sin(theta[2]),      0],
-        [np.sin(theta[2]),    np.cos(theta[2]),       0],
-        [0,               0,                  1]])
+        [np.cos(theta[2]), -np.sin(theta[2]),   0.],
+        [np.sin(theta[2]), np.cos(theta[2]),    0.],
+        [0.,               0.,                  1.]])
 
-    R = np.matmul(R_x, np.matmul(R_y, R_z))
+    R = np.dot(R_x, np.dot(R_y, R_z))
 
-    t = t.reshape([-1, 1])
-    R = np.concatenate([R, t], axis=-1)
-    R = np.concatenate([R, np.array([0, 0, 0, 1]).reshape([1, -1])], axis=0)
+    t = t.reshape((-1, 1))
+    R = np.concatenate((R, t), axis=-1)
+    R = np.concatenate((R, np.array([0, 0, 0, 1]).reshape((1, -1))), axis=0)
     return R
 
 
+@njit
 def psr_to_xyz(p, s, r):
     trans_matrix = euler_angle_to_rotate_matrix(r, p)
 
@@ -53,44 +54,32 @@ def psr_to_xyz(p, s, r):
 
         -x, y, -z, 1,   -x, -y, -z, 1,  # rear-left-bottom, rear-right-bottom
         -x, -y, z, 1,   -x, y, z, 1,  # rear-right-top,   rear-left-top
-
-        # middle plane
-        # 0, y, -z, 1,   0, -y, -z, 1,  #rear-left-bottom, rear-right-bottom
-        # 0, -y, z, 1,   0, y, z, 1,    #rear-right-top,   rear-left-top
     ]).reshape((-1, 4))
 
-    world_coord = np.matmul(trans_matrix, np.transpose(local_coord))
+    world_coord = np.dot(trans_matrix, np.transpose(local_coord))
 
     return world_coord
 
-
-def box_to_nparray(box):
-    return np.array([
-        [box["position"]["x"], box["position"]["y"], box["position"]["z"]],
-        [box["scale"]["x"], box["scale"]["y"], box["scale"]["z"]],
-        [box["rotation"]["x"], box["rotation"]["y"], box["rotation"]["z"]],
-    ])
-
-
+@njit
 def proj_pts3d_to_img(pts, extrinsic, intrinsic):
-
-    imgpos = np.matmul(extrinsic, pts)
+    imgpos3 = np.dot(extrinsic, pts)
 
     # rect matrix shall be applied here, for kitti
-
-    imgpos3 = imgpos[:3, :]
 
     if np.any(imgpos3[2] < 0):
         return None
 
-    imgpos2 = np.matmul(intrinsic, imgpos3)
-
-    imgfinal = imgpos2[0:2, :]/imgpos2[2:, :]
-    return imgfinal
+    imgpos2 = np.dot(intrinsic, imgpos3)
+    
+    return imgpos2[0:2, :] / imgpos2[2:, :]
 
 
 def box_to_2d_points(psr, extrinsic, intrinsic):
-    box = box_to_nparray(psr)
+    box = np.array([
+        [psr["position"]["x"], psr["position"]["y"], psr["position"]["z"]],
+        [psr["scale"]["x"], psr["scale"]["y"], psr["scale"]["z"]],
+        [psr["rotation"]["x"], psr["rotation"]["y"], psr["rotation"]["z"]],
+    ])
     box3d = psr_to_xyz(box[0], box[1], box[2])
     return proj_pts3d_to_img(box3d, extrinsic, intrinsic)
 
@@ -127,7 +116,7 @@ def main():
     with open(calib_filename, 'r') as f:
         calib = json.load(f)
 
-    extrinsic = np.array(calib['extrinsic']).reshape(4, 4)
+    extrinsic = np.array(calib['extrinsic']).reshape(4, 4)[:3, :]
     intrinsic = np.array(calib['intrinsic']).reshape(3, 3)
 
     # image_shape = [0, 0, image.shape[0], image.shape[1]]
