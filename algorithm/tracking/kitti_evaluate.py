@@ -100,12 +100,12 @@ class TrackingEvaluation(object):
              missed         - number of missed targets (FN)
     """
 
-    def __init__(self, t_sha, root, part="all", gt_path="./data/tracking", min_overlap=0.5, max_truncation=0,
+    def __init__(self, t_sha, result_root, part, gt_path, min_overlap=0.5, max_truncation=0,
                  min_height=25, max_occlusion=2, cls="car"):
         # get number of sequences and
         # get number of frames per sequence from test mapping
         # (created while extracting the benchmark)
-        filename_test_mapping = "./data/tracking/evaluate_tracking.seqmap"
+        filename_test_mapping = "./data/evaluate_tracking.seqmap"
         self.n_frames = []
         self.sequence_name = []
         self.sequence_id = []
@@ -131,7 +131,7 @@ class TrackingEvaluation(object):
         # data and parameter
         self.gt_path = os.path.join(gt_path, "label_02")
         self.t_sha = t_sha
-        self.t_path = os.path.join(root, t_sha, part)
+        self.t_path = os.path.join(result_root, t_sha, part)
 
         # statistics and numbers for evaluation
         self.n_gt = 0  # number of ground truth detections minus ignored false negatives and true positives
@@ -901,7 +901,7 @@ class TrackingEvaluation(object):
         return self.MOTA, self.MOTP, self.recall, self.precision, self.F1, self.fp, self.fn, self.id_switches
 
 
-def evaluate(result_sha, root, part="all"):
+def evaluate(result_sha, result_root, part, gt_path):
     """
         Entry point for evaluation, will load the data and start evaluation for
         CAR and PEDESTRIAN if available.
@@ -911,7 +911,7 @@ def evaluate(result_sha, root, part="all"):
     print("Processing Result for KITTI Tracking Benchmark")
     classes = []
     for c in ("car", "pedestrian"):
-        e = TrackingEvaluation(t_sha=result_sha, root=root, part=part, cls=c)
+        e = TrackingEvaluation(t_sha=result_sha, result_root=result_root, part=part, cls=c, gt_path=gt_path)
         # load tracker data and check provided classes
         try:
             if not e.loadTracker():
