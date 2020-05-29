@@ -1,0 +1,6 @@
+munkres
+motmetrics
+pyproj
+filterpy
+ortools
+torch < 1.5.0

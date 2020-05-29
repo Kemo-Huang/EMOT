@@ -1,0 +1,3 @@
+- install spconv
+  - if pytorch >= 1.4, you must comment out the the two lines of "INTERFACE_COMPILE_OPTIONS" in **Caffe2Targets.cmake** file of pytorch package
+- add second to python path
