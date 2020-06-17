@@ -64,14 +64,12 @@ class AffinityModule(nn.Module):
             nn.GroupNorm(in_channels // 4, in_channels // 4),
             nn.ReLU(inplace=True), nn.Conv2d(in_channels // 4, 1, 1, 1))
 
-    def forward(self, objs, dets):
+    def forward(self, trks, dets):
         """
-        objs : 1xDxN
-        dets : 1xDxM
-        obj_feats: 3xDxN
-        det_feats: 3xDxN
+        trks : 3xDxN
+        dets : 3xDxM
         """
-        x = self.affinity(objs, dets)
+        x = self.affinity(trks, dets)
         new_score, end_score = self.w_new_end(x)
         out = self.conv1(x)
 

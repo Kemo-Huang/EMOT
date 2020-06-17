@@ -1,143 +1,8 @@
-from __future__ import print_function
-
-import numpy as np
 import os.path
 import time
-import torchvision.transforms as transforms
-from PIL import Image
 import torch
-from torch.utils.data import Dataset, DataLoader
-from functools import partial
+from torch.utils.data import DataLoader
 from tracking.tracker import Tracker
-from utils.data_util import generate_seq_dets
-from utils.point_util import read_and_prep_points
-from kitti_evaluate import evaluate
-
-TRAIN_SEQ_ID = ['0003', '0001', '0013', '0009', '0004',
-                '0020', '0006', '0015', '0008', '0012']
-VALID_SEQ_ID = ['0005', '0007', '0017', '0011', '0002',
-                '0014', '0000', '0010', '0016', '0019', '0018']
-TEST_SEQ_ID = [f'{i:04d}' for i in range(29)]
-# Valid sequence 0017 has no cars in detection,
-# so it should not be included if val with GT detection
-# VALID_SEQ_ID = ['0005', '0007', '0011', '0002', '0014', \
-#                 '0000', '0010', '0016', '0019', '0018']
-TRAINVAL_SEQ_ID = [f'{i:04d}' for i in range(21)]
-
-
-class TrackingDataset(object):
-    def __init__(self, root_dir, link_file, det_file, fix_iou=0.2, fix_count=2,
-                 transform=None, num_point_features=4, modality='Car'):
-        self.root_dir = root_dir
-        self.modality = modality
-        self.num_point_features = num_point_features
-        self.test = False
-
-        if "trainval" in link_file:
-            self.seq_ids = TRAINVAL_SEQ_ID
-        elif "train" in link_file:
-            self.seq_ids = TRAIN_SEQ_ID
-        elif "val" in link_file:
-            self.seq_ids = VALID_SEQ_ID
-        elif 'test' in link_file:
-            self.test = True
-            self.seq_ids = TEST_SEQ_ID
-
-        # {sequence: {frame: {} } } }
-        self.sequence_det = generate_seq_dets(root_dir, link_file, det_file, self.seq_ids,
-                                              iou_threshold=fix_iou, fix_threshold=fix_count,
-                                              allow_empty=True, test=self.test)
-
-        if transform is None:
-            self.transform = transforms.Compose([transforms.ToTensor()])
-        else:
-            self.transform = transform
-
-        self.get_pointcloud = partial(read_and_prep_points, root_path=root_dir,
-                                      num_point_features=num_point_features)
-
-        self.meta = self._generate_meta_seq()
-
-    def __len__(self):
-        return len(self.meta)
-
-    def __getitem__(self, idx):
-        return self.meta[idx]
-
-    def _generate_meta_seq(self):
-        meta = []
-        for seq_id in self.seq_ids:
-            if seq_id == '0007':
-                els = list(self.sequence_det[seq_id].items())
-                seq_length = int(els[-1][0])
-            else:
-                seq_length = len(self.sequence_det[seq_id])
-            det_frames = []
-            for i in range(0, seq_length):
-                frame_id = f'{i:06d}'
-                # Get first frame, skip the empty frame
-                if frame_id in self.sequence_det[seq_id] and \
-                        len(self.sequence_det[seq_id][frame_id]['detection']['name']) > 0:
-                    det_frames.append(self.sequence_det[seq_id][frame_id])
-                else:
-                    continue
-
-            meta.append(SequenceDataset(name=seq_id, modality=self.modality,
-                                        root_dir=self.root_dir, det_frames=det_frames, transform=self.transform,
-                                        get_pointcloud=self.get_pointcloud))
-        return meta
-
-
-class SequenceDataset(Dataset):
-
-    def __init__(self, name, modality, root_dir, det_frames,
-                 transform, get_pointcloud):
-        self.root_dir = root_dir
-        self.metas = det_frames
-        self.idx = 0
-        self.seq_len = len(det_frames)
-        self.name = name
-        self.modality = modality
-        self.get_pointcloud = get_pointcloud
-
-        if transform is None:
-            self.transform = transforms.Compose([transforms.ToTensor()])
-        else:
-            self.transform = transform
-
-    def __getitem__(self, idx):
-        return self._generate_boxes_img_points(idx)
-
-    def __len__(self):
-        return len(self.metas)
-
-    def _generate_boxes_img_points(self, idx):
-        frame = self.metas[idx]
-        det_imgs = []
-        ###
-        path = f"{self.root_dir}/image_02/{frame['image_path']}"
-        img = Image.open(path)
-        det_num = frame['detection']['bbox'].shape[0]
-        frame['frame_info']['img_shape'] = np.array([img.size[1], img.size[0]])  # w, h -> h, w
-        point_cloud = self.get_pointcloud(info=frame['frame_info'], point_path=frame['point_path'],
-                                          dets=frame['detection'])
-        for i in range(det_num):
-            x1 = np.floor(frame['detection']['bbox'][i][0])
-            y1 = np.floor(frame['detection']['bbox'][i][1])
-            x2 = np.ceil(frame['detection']['bbox'][i][2])
-            y2 = np.ceil(frame['detection']['bbox'][i][3])
-            det_imgs.append(
-                self.transform(img.crop((x1, y1, x2, y2)).resize((224, 224), Image.BILINEAR)).unsqueeze(0))
-
-        if 'image_idx' in frame['detection'].keys():
-            frame['detection'].pop('image_idx')
-
-        det_imgs = torch.cat(det_imgs, dim=0)
-        det_points = torch.Tensor(point_cloud['points'])
-        det_boxes = point_cloud['boxes']
-        det_points_split = point_cloud['det_lens']
-        ###
-        return det_boxes, det_imgs, det_points, det_points_split, frame['detection']
 
 
 def EMOT(t_miss=2, t_hit=2, w_app=0.25, w_iou=0.35, w_loc=0.4):
@@ -202,27 +67,66 @@ if __name__ == '__main__':
     result_root = "results"
     result_sha = "data"
     part = 'val'
+    # part = 'train'
     result_dir = os.path.join(result_root, result_sha, part)
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
-    val_root = "/home/kemo/Kitti/tracking/training"
-    val_link = "./data/val.txt"
-    val_det = "./data/pp_val_dets.pkl"
+
+    dataset_name = 'kitti'
+
     ckpt = "pretrained_models/pp_pv_40e_dualadd_subabs_C.pth"
 
-    valid_transform = transforms.Compose([
-        transforms.Resize(224),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    val_dataset = TrackingDataset(
-        root_dir=val_root,
-        link_file=val_link,
-        det_file=val_det,
-        transform=valid_transform,
-        fix_iou=1,
-        fix_count=0)
+    if dataset_name == 'kitti':
+        val_root = "/home/kemo/Kitti/tracking/training"
+        from dataset.kitti.dataset import TrackingDataset
+        from dataset.kitti.evaluate import evaluate
 
-    EMOT(t_miss=4, t_hit=1, w_app=0, w_iou=1, w_loc=0)
-    evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        val_dataset = TrackingDataset(root_dir=val_root)
+
+        # EMOT(t_miss=2, t_hit=1, w_app=1, w_iou=0, w_loc=0)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=1, w_iou=0, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=1, w_app=0, w_iou=1, w_loc=0)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=0, w_iou=1, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=1, w_app=0, w_iou=0, w_loc=1)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=0, w_iou=0, w_loc=1)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=1, w_app=0.5, w_iou=0.5, w_loc=0)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=0.5, w_iou=0.5, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=1, w_app=0.5, w_iou=0, w_loc=0.5)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=0.5, w_iou=0, w_loc=0.5)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=1, w_app=0, w_iou=0.5, w_loc=0.5)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=0, w_iou=0.5, w_loc=0.5)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=1, w_app=0.3, w_iou=0.35, w_loc=0.35)
+        # print("EMOT(t_miss=2, t_hit=1, w_app=0.3, w_iou=0.35, w_loc=0.35)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=0, w_app=0, w_iou=1, w_loc=0)
+        # print("EMOT(t_miss=2, t_hit=0, w_app=0, w_iou=1, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=2, t_hit=2, w_app=0, w_iou=1, w_loc=0)
+        # print("EMOT(t_miss=2, t_hit=2, w_app=0, w_iou=1, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+        #
+        # EMOT(t_miss=3, t_hit=1, w_app=0, w_iou=1, w_loc=0)
+        # print("EMOT(t_miss=3, t_hit=1, w_app=0, w_iou=1, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+
+        EMOT(t_miss=4, t_hit=1, w_app=0, w_iou=1, w_loc=0)
+        print("EMOT(t_miss=4, t_hit=1, w_app=0, w_iou=1, w_loc=0)")
+        evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)
+
+        # EMOT(t_miss=5, t_hit=1, w_app=0, w_iou=1, w_loc=0)
+        # print("EMOT(t_miss=5, t_hit=1, w_app=0, w_iou=1, w_loc=0)")
+        # evaluate(result_sha=result_sha, result_root=result_root, part=part, gt_path=val_root)

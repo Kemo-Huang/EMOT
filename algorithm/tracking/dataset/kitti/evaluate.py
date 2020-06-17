@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# encoding: utf-8
 """
     function that does the evaluation
     input:
@@ -18,13 +16,36 @@
         -> detailed results/graphics/plots: results/<result_sha>/subdir
            with appropriate subdir and file names (all subdir's need to be created)
 """
-
-import sys
 import os
 import copy
 import math
 from munkres import Munkres
 from collections import defaultdict
+from .data.config import *
+
+seqmap = {
+    "0000": "000154",
+    "0001": "000447",
+    "0002": "000233",
+    "0003": "000144",
+    "0004": "000314",
+    "0005": "000297",
+    "0006": "000270",
+    "0007": "000800",
+    "0008": "000390",
+    "0009": "000803",
+    "0010": "000294",
+    "0011": "000373",
+    "0012": "000078",
+    "0013": "000340",
+    "0014": "000106",
+    "0015": "000376",
+    "0016": "000209",
+    "0017": "000145",
+    "0018": "000339",
+    "0019": "001059",
+    "0020": "000837",
+}
 
 
 class tData:
@@ -71,17 +92,6 @@ class tData:
         return '\n'.join("%s: %s" % item for item in attrs.items())
 
 
-TRAIN_SEQ_ID = ['0003', '0001', '0013', '0009', '0004',
-                '0020', '0006', '0015', '0008', '0012']
-VALID_SEQ_ID = ['0005', '0007', '0017', '0011', '0002',
-                '0014', '0000', '0010', '0016', '0019', '0018']
-# Valid sequence 0017 has no cars in detection, 
-# so it should not be included if val with GT detection
-# VALID_SEQ_ID = ['0005', '0007', '0011', '0002', '0014', \
-#                '0000', '0010', '0016', '0019', '0018']
-TRAINVAL_SEQ_ID = [f'{i:04d}' for i in range(21)]
-
-
 class TrackingEvaluation(object):
     """ tracking statistics (CLEAR MOT, id-switches, fragments, ML/PT/MT, precision/recall)
              MOTA	- Multi-object tracking accuracy in [0,100]
@@ -105,7 +115,6 @@ class TrackingEvaluation(object):
         # get number of sequences and
         # get number of frames per sequence from test mapping
         # (created while extracting the benchmark)
-        filename_test_mapping = "./data/evaluate_tracking.seqmap"
         self.n_frames = []
         self.sequence_name = []
         self.sequence_id = []
@@ -115,15 +124,12 @@ class TrackingEvaluation(object):
             self.sequence_id = TRAIN_SEQ_ID
         elif part == "all":
             self.sequence_id = TRAINVAL_SEQ_ID
-        with open(filename_test_mapping, "r") as fh:
-            for i, l in enumerate(fh):
-                fields = l.split(" ")
-                seq_id = "%04d" % int(fields[0])
-                if seq_id in self.sequence_id:
-                    self.sequence_name.append(seq_id)
-                    self.n_frames.append(int(fields[3]) - int(fields[2]) + 1)
-        fh.close()
-        self.n_sequences = i + 1
+
+        for seq_id, n_frames in seqmap.items():
+            if seq_id in self.sequence_id:
+                self.sequence_name.append(seq_id)
+                self.n_frames.append(int(n_frames))
+        self.n_sequences = len(seqmap)
 
         # class to evaluate, i.e. pedestrian or car
         self.cls = cls
@@ -950,25 +956,3 @@ def evaluate(result_sha, result_root, part, gt_path):
         return False
     print("Thank you for participating in our benchmark!")
     return True
-
-
-#########################################################################
-# entry point of evaluation script
-# input:
-#   - result_sha (unique key of results)
-#   - user_sha (key of user who submitted the results, optional)
-#   - user_sha (email of user who submitted the results, optional)
-if __name__ == "__main__":
-
-    # check for correct number of arguments. if user_sha and email are not supplied,
-    # no notification email is sent (this option is used for auto-updates)
-    if len(sys.argv) != 3 and len(sys.argv) != 5:
-        print("Usage: python eval_tracking.py root result_sha [user_sha email]")
-        sys.exit(1)
-
-    # get unique sha key of submitted results
-    result_sha = sys.argv[2]
-    root = sys.argv[1]
-
-    # evaluate results and send notification email to user
-    success = evaluate(result_sha, root)

@@ -105,7 +105,6 @@ class PointNetfeatGN(nn.Module):
         self.bn4 = nn.GroupNorm(128 // reduction, 128 // reduction)
         self.conv5 = nn.Conv1d(128 // reduction, 1024 // reduction, 1)
         self.bn5 = nn.GroupNorm(1024 // reduction, 1024 // reduction)
-        print("use avg in pointnet feat")
         self.avg_pool = nn.AdaptiveAvgPool1d(1)
 
     def forward(self, x, det_lens):

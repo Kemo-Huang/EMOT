@@ -71,7 +71,7 @@ class Tracker:
         for i in range(num_det):
             det_lens.append(points_split[i + 1] - points_split[i])
         det_scores, det_features = self.model(images, points, det_lens)
-        link_scores, new_scores, end_scores = self.model.associate(pred_features, det_features)
+        link_scores, new_scores, end_scores = self.model.scoring(pred_features, det_features)
         matched, unmatched_dets, tentative_dets = ortools_solve(
             det_boxes,
             pred_boxes,

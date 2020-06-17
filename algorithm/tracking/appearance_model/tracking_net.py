@@ -101,7 +101,7 @@ class TrackingNet(nn.Module):
         det_scores = self.determine_det(feats)
         return det_scores[2], feats
 
-    def associate(self, predictions, detections):
+    def scoring(self, predictions, detections):
         link_mats, new_scores, end_scores = self.w_link(predictions, detections)
         link_score_prev = nn.functional.softmax(link_mats, dim=-1)
         link_score_next = nn.functional.softmax(link_mats, dim=-2)

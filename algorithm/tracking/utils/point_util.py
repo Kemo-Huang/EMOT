@@ -343,10 +343,9 @@ def read_and_prep_points(info, root_path, point_path, dets, num_point_features=4
         points_split.append(points_split[-1] + bbox_point.shape[0])
         bbox_points.append(bbox_point)
     bbox_points = np.concatenate(bbox_points, axis=0)
-    example = {
+
+    return {
         'points': bbox_points,
         'boxes': boxes,
         'det_lens': points_split
     }
-
-    return example

@@ -52,7 +52,7 @@ def ortools_solve(det_boxes,
     # Constraints
     for j in range(num_pred):
         det_idx = j
-        # end + successor = det
+        # pred = link + end
         solver.Add(
             solver.Sum([y_end[det_idx], (-1) * y_det[det_idx]] +
                        [y_link[j][k] for k in range(num_det)]) == 0)
@@ -61,7 +61,7 @@ def ortools_solve(det_boxes,
 
     for k in range(num_det):
         det_idx = num_pred + k
-        # new + prec = det
+        # det = link + start
         solver.Add(
             solver.Sum([y_new[det_idx], (-1) * y_det[det_idx]] +
                        [y_link[j][k] for j in range(num_pred)]) == 0)
