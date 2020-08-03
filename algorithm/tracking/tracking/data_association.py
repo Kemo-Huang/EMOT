@@ -1,4 +1,4 @@
-from utils.box_util import distance_iou
+from utils.box_util import distance_iou_kitti, distance_iou_sustech
 import numpy as np
 from ortools.linear_solver import pywraplp
 
@@ -11,7 +11,8 @@ def ortools_solve(det_boxes,
                   end_score,
                   w_app,
                   w_iou,
-                  w_motion):
+                  w_motion,
+                  kitti=True):
     num_det = len(det_boxes)
     num_pred = len(pred_boxes)
     # IoU cost
@@ -19,7 +20,7 @@ def ortools_solve(det_boxes,
     motion_matrix = np.zeros((num_pred, num_det))
     for t, trk in enumerate(pred_boxes):
         for d, det in enumerate(det_boxes):
-            iou, motion = distance_iou(trk, det)
+            iou, motion = distance_iou_kitti(trk, det) if kitti else distance_iou_sustech(trk, det)
             iou_matrix[t, d] = iou
             motion_matrix[t, d] = motion
     solver = pywraplp.Solver('SolveAssignmentProblemMIP',

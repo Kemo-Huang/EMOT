@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from tracking.data_association import ortools_solve
-from tracking.track import Track
+from tracking.kitti_track import Track
 from appearance_model.tracking_net import TrackingNet
 
 
@@ -19,10 +19,12 @@ class Tracker:
         model.load_state_dict(checkpoint['state_dict'])
         model.eval()
         self.model = model
+        self.last_frame_idx = 0
 
     def reset(self):
         self.tracks = []
         self.frame_count = 0
+        self.last_frame_idx = 0
         self.model.eval()
 
     def track_management(self):
@@ -30,20 +32,23 @@ class Tracker:
         results = []
         for trk in reversed(self.tracks):
             if trk.hits >= self.t_hit or self.frame_count <= self.t_hit:
-                if trk.time_since_update == 0:
+                if trk.misses == 0:
                     results.append(trk.get_data())
             idx -= 1
             # remove dead tracks
-            if trk.time_since_update >= self.t_miss:
+            if trk.misses >= self.t_miss:
                 self.tracks.pop(idx)
         return results
 
     def update(self, det_boxes, images, points, points_split, detections: dict):
-        self.frame_count += 1
+        cur_frame_idx = int(detections['frame_idx'])
+        passed_frames = cur_frame_idx - self.last_frame_idx
+        self.last_frame_idx = cur_frame_idx
+        self.frame_count += passed_frames
         num_det = len(det_boxes)
         num_pred = len(self.tracks)
         alpha = detections['alpha']
-        bbox = detections['bbox']
+        bbox = detections['bbox']  # 2d bounding box
         # for the first frame
         if num_pred == 0:
             det_lens = []
@@ -60,7 +65,7 @@ class Tracker:
         pred_scores = torch.empty(num_pred)
         pred_features = torch.empty((3, 512, num_pred))
         for i, trk in enumerate(self.tracks):
-            box, score, feature = trk.predict()
+            box, score, feature = trk.predict(passed_frames)
             pred_boxes[i] = box
             pred_features[:, :, i] = feature
             pred_scores[i] = score
@@ -98,6 +103,6 @@ class Tracker:
         for i in tentative_dets:
             trk = Track(bbox=det_boxes[i], feature=det_features[:, :, i],
                         score=det_scores[i], info={'alpha': alpha[i], 'bbox': bbox[i]})
-            trk.time_since_update += 1
+            trk.misses += 1
             self.tracks.append(trk)
         return self.track_management()

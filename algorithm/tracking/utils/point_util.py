@@ -1,5 +1,6 @@
 import numpy as np
 from numba import njit
+from .box_util import euler_angle_to_rotation_matrix
 
 
 def points_in_rbbox(points, rbbox, lidar=True):
@@ -349,3 +350,17 @@ def read_and_prep_points(info, root_path, point_path, dets, num_point_features=4
         'boxes': boxes,
         'det_lens': points_split
     }
+
+
+@njit
+def crop_points_psr(points, psr):
+    p = psr[:3]
+    s = psr[3:6]
+    r = psr[6:]
+    R = euler_angle_to_rotation_matrix(r)
+    world_dis = points - p
+    local_dis = np.dot(world_dis, R)  # reverse rotation
+    points = points[(np.absolute(local_dis[:, 0]) * 2 < s[0])
+                    & (np.absolute(local_dis[:, 1]) * 2 < s[1])
+                    & (np.absolute(local_dis[:, 2]) * 2 < s[2])]
+    return points

@@ -33,17 +33,15 @@ def euler_angle_to_rotate_matrix(eu, t):
         [0.,               0.,                  1.]])
 
     R = np.dot(R_x, np.dot(R_y, R_z))
-
     t = t.reshape((-1, 1))
     R = np.concatenate((R, t), axis=-1)
     R = np.concatenate((R, np.array([0, 0, 0, 1]).reshape((1, -1))), axis=0)
     return R
 
-
 @njit
 def psr_to_xyz(p, s, r):
     trans_matrix = euler_angle_to_rotate_matrix(r, p)
-
+    
     x = s[0]/2
     y = s[1]/2
     z = s[2]/2
@@ -57,7 +55,6 @@ def psr_to_xyz(p, s, r):
     ]).reshape((-1, 4))
 
     world_coord = np.dot(trans_matrix, np.transpose(local_coord))
-
     return world_coord
 
 @njit

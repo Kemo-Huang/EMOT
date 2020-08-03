@@ -10,3 +10,4 @@ opencv-python
 torchvision
 pillow
 motmetrics
+open3d

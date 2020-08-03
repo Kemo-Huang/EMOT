@@ -5,7 +5,6 @@ import numpy as np
 import pyproj
 import torch
 import motmetrics
-import cv2
 from collections import OrderedDict
 
 
@@ -249,6 +248,7 @@ def inverse_rigid_trans(Tr):
     inv_Tr[0:3, 0:3] = np.transpose(Tr[0:3, 0:3])
     inv_Tr[0:3, 3] = np.dot(-np.transpose(Tr[0:3, 0:3]), Tr[0:3, 3])
     return inv_Tr
+
 
 LABEL = {
     'Car': 0,
@@ -671,3 +671,19 @@ def calculate_distance(dets, gt_dets, max_iou):
     gt_det = gt_dets.copy()
     gt_det[:, 2:] = gt_det[:, 2:] - gt_det[:, :2]
     return motmetrics.distances.iou_matrix(gt_det, det, max_iou=max_iou)
+
+
+def write_kitti_format(results, detections, out_file):
+    for (tid, box, info, score) in results:
+        frame_id = detections['frame_idx'].lstrip('0')
+        if len(frame_id) == 0:
+            frame_id = '0'
+        x, y, z, yaw, l, w, h = box.flatten()
+        x1, y1, x2, y2 = info['bbox']
+        out_file.write(f"{frame_id} {tid} Car 0 0 "
+                       # f"{info['alpha']} "
+                       "0 "
+                       f"{x1} {y1} {x2} {y2} "
+                       f"{h} {w} {l} {x} {y} {z} "
+                       f"{yaw} "
+                       f"{score}\n")

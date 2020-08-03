@@ -3,7 +3,7 @@ import numpy as np
 import os
 import colorsys
 from utils.kitti_util import Calibration
-from utils.box_util import compute_box_3d
+from utils.box_util import box_to_corners_kitti
 
 
 def draw_projected_box3d(image, qs, color=(0, 255, 0), thickness=2):
@@ -56,7 +56,7 @@ def convert_data_to_object(data):
 def project_3d_box_to_image(obj, calib):
     center = obj['center3d']
     bbox_3d = np.array([center[0], center[1], center[2], obj['ry'], obj['l'], obj['w'], obj['h']])
-    corners_3d = compute_box_3d(bbox_3d)
+    corners_3d = box_to_corners_kitti(bbox_3d)
 
     # project the 3d bounding box (camera coordinate) into the image plane
     corners_2d = calib.project_rect_to_image(corners_3d).astype(int)

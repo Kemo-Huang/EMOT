@@ -4,7 +4,7 @@ from scipy.spatial import ConvexHull
 
 
 @njit
-def compute_box_3d(bbox3d):
+def box_to_corners_kitti(bbox3d):
     """
     Computes the rotation and translation of the bounding box.
     :param bbox3d: [x,y,z,theta,l,w,h]
@@ -48,6 +48,68 @@ def compute_box_3d(bbox3d):
     corners_3d[2, :] += bbox3d[2]
 
     return np.transpose(corners_3d)
+
+
+@njit
+def euler_angle_to_rotation_matrix(r):
+    # Calculate rotation about x axis
+    R_x = np.array([
+        [1., 0., 0.],
+        [0., np.cos(r[0]), -np.sin(r[0])],
+        [0., np.sin(r[0]), np.cos(r[0])]
+    ])
+
+    # Calculate rotation about y axis
+    R_y = np.array([
+        [np.cos(r[1]), 0., np.sin(r[1])],
+        [0., 1., 0.],
+        [-np.sin(r[1]), 0., np.cos(r[1])]
+    ])
+
+    # Calculate rotation about z axis
+    R_z = np.array([
+        [np.cos(r[2]), -np.sin(r[2]), 0.],
+        [np.sin(r[2]), np.cos(r[2]), 0.],
+        [0., 0., 1.]
+    ])
+
+    R = np.dot(R_x, np.dot(R_y, R_z))
+    return R
+
+
+@njit
+def psr_to_corners3d(p, s, R) -> np.ndarray:
+    """
+             z  x
+             | /
+        y -- o
+
+        1 -------- 0
+       /|         /|
+      2 -------- 3 .
+      | |        | |
+      . 5 -------- 4
+      |/         |/
+      6 -------- 7
+
+    """
+    x = s[0] / 2
+    y = s[1] / 2
+    z = s[2] / 2
+
+    local_coord = np.array([
+        x, -y, z,  # front-right-top
+        x, y, z,  # front-left-top
+        -x, y, z,  # rear-left-top
+        -x, -y, z,  # rear-right-top
+        x, -y, -z,  # front-right-bottom
+        x, y, -z,  # front-left-bottom
+        -x, y, -z,  # rear-left-bottom
+        -x, -y, -z,  # rear-right-bottom
+    ]).reshape((-1, 3))
+
+    world_coord = np.dot(R, np.transpose(local_coord)) + p.reshape((3, 1))
+    return world_coord
 
 
 @njit
@@ -106,22 +168,16 @@ def convex_hull_intersection(p1, p2):
     """
     inter_p = polygon_clip(p1, p2)
     if inter_p is not None:
-        hull_inter = ConvexHull(inter_p)
-        return hull_inter.volume
+        return ConvexHull(inter_p).volume
     else:
         return 0.0
-
-
-@njit
-def poly_area(x, y):
-    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
 
 def iou3d(box_3d_1, box_3d_2, criterion='union'):
     """ Compute 3D bounding box IoU.
     """
-    corners1 = compute_box_3d(box_3d_1)
-    corners2 = compute_box_3d(box_3d_2)
+    corners1 = box_to_corners_kitti(box_3d_1)
+    corners2 = box_to_corners_kitti(box_3d_2)
     # corner points are in counter clockwise order
     rect1 = [(corners1[i, 0], corners1[i, 2]) for i in range(3, -1, -1)]
     rect2 = [(corners2[i, 0], corners2[i, 2]) for i in range(3, -1, -1)]
@@ -171,12 +227,12 @@ def iou2d(a, b, criterion="union"):
     return o
 
 
-def distance_iou(box1, box2):
-    corners1 = compute_box_3d(box1)
-    corners2 = compute_box_3d(box2)
+def distance_iou_kitti(box1, box2):
+    corners1 = box_to_corners_kitti(box1)
+    corners2 = box_to_corners_kitti(box2)
     # corner points are in counter clockwise order
-    rect1 = [(corners1[i, 0], corners1[i, 2]) for i in range(3, -1, -1)]
-    rect2 = [(corners2[i, 0], corners2[i, 2]) for i in range(3, -1, -1)]
+    rect1 = [(corners1[i, 0], corners1[i, 1]) for i in range(3, -1, -1)]
+    rect2 = [(corners2[i, 0], corners2[i, 1]) for i in range(3, -1, -1)]
     inter_area = convex_hull_intersection(rect1, rect2)
     x_max1, y_max1, z_max1 = np.max(corners1, axis=0)
     x_max2, y_max2, z_max2 = np.max(corners2, axis=0)
@@ -191,4 +247,43 @@ def distance_iou(box1, box2):
     p_max = np.array([max(x_max1, x_max2), max(y_max1, y_max2), max(z_max1, z_max2)], dtype=float)
     p_min = np.array([min(x_min1, x_min2), min(y_min1, y_min2), min(z_min1, z_min2)], dtype=float)
     distance = np.linalg.norm(box1[:3] - box2[:3]) / np.linalg.norm(p_max - p_min)
+    return iou, 1 - distance
+
+
+from shapely.geometry import Polygon
+
+
+# @njit
+def distance_iou_sustech(psr1, psr2):
+    p1 = psr1[:3]
+    p2 = psr2[:3]
+    s1 = psr1[3:6]
+    s2 = psr2[3:6]
+    R1 = euler_angle_to_rotation_matrix(psr1[6:])
+    R2 = euler_angle_to_rotation_matrix(psr2[6:])
+    corners1 = np.transpose(psr_to_corners3d(p1, s1, R1))  # 8 * 3
+    corners2 = np.transpose(psr_to_corners3d(p2, s2, R2))
+    # # corner points are in counter clockwise order
+    # rect1 = [(corners1[i, 0], corners1[i, 2]) for i in range(3, -1, -1)]
+    # rect2 = [(corners2[i, 0], corners2[i, 2]) for i in range(3, -1, -1)]
+    # inter_area = convex_hull_intersection(rect1, rect2)
+
+    rect1 = Polygon(corners1[:4, :2])
+    rect2 = Polygon(corners2[:4, :2])
+    inter_area = rect1.intersection(rect2).area
+    print(inter_area)
+
+    x_max1, y_max1, z_max1 = np.max(corners1, axis=0)
+    x_max2, y_max2, z_max2 = np.max(corners2, axis=0)
+    x_min1, y_min1, z_min1 = np.min(corners1, axis=0)
+    x_min2, y_min2, z_min2 = np.min(corners2, axis=0)
+    # # iou
+    inter_vol = inter_area * max(0.0, min(y_max1, y_max2) - max(y_min1, y_min2))
+    vol1 = box3d_vol(corners1)
+    vol2 = box3d_vol(corners2)
+    iou = inter_vol / (vol1 + vol2 - inter_vol)
+    # distance
+    p_max = np.array([max(x_max1, x_max2), max(y_max1, y_max2), max(z_max1, z_max2)], dtype=float)
+    p_min = np.array([min(x_min1, x_min2), min(y_min1, y_min2), min(z_min1, z_min2)], dtype=float)
+    distance = np.linalg.norm(p1 - p2) / np.linalg.norm(p_max - p_min)
     return iou, 1 - distance

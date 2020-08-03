@@ -1,4 +1,4 @@
-from motion_model.kalman import Kalman
+from motion_model.kalman import KalmanPSR
 
 
 class Track:
@@ -7,28 +7,27 @@ class Track:
     def __init__(self, bbox, score, info, feature):
         self.id = Track.new_id
         Track.new_id += 1
-        self.motion_model = Kalman(bbox)
+        self.motion_model = KalmanPSR(bbox)
         self.score = score
         self.info = info
         self.feature = feature
-        self.time_since_update = 0
+        self.misses = 0
         self.hits = 0
 
-    def predict(self):
+    def predict(self, t):
         """
         features: vector length = 512
-        :return:
         """
-        self.time_since_update += 1
-        state = (self.motion_model.predict().flatten(), self.score, self.feature.view(3, 512))
+        self.misses += t
+        state = (self.motion_model.predict(t).flatten(), self.score, self.feature.view(3, 512))
         return state
 
     def _update_state(self):
-        self.time_since_update = 0
+        self.misses = 0
         self.hits += 1
 
-    def _update_motion(self, bbox_3d):
-        self.motion_model.update(bbox_3d)
+    def _update_motion(self, bbox_psr):
+        self.motion_model.update(bbox_psr)
 
     def _update_feature(self, feature):
         self.feature = feature
