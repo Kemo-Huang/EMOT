@@ -89,29 +89,28 @@ class SequenceDataset(Dataset):
         ###
         path = f"{self.root_dir}/image_02/{frame['image_path']}"
         img = Image.open(path)
-        det_num = frame['detection']['bbox'].shape[0]
+        boxes_2d = frame['detection']['bbox']
+        det_num = boxes_2d.shape[0]
         frame['frame_info']['img_shape'] = np.array([img.size[1], img.size[0]])  # w, h -> h, w
         point_cloud = read_and_prep_points(root_path=self.root_dir,
                                            info=frame['frame_info'],
                                            point_path=frame['point_path'],
                                            dets=frame['detection'])
         for i in range(det_num):
-            x1 = np.floor(frame['detection']['bbox'][i][0])
-            y1 = np.floor(frame['detection']['bbox'][i][1])
-            x2 = np.ceil(frame['detection']['bbox'][i][2])
-            y2 = np.ceil(frame['detection']['bbox'][i][3])
+            x1 = np.floor(boxes_2d[i][0])
+            y1 = np.floor(boxes_2d[i][1])
+            x2 = np.ceil(boxes_2d[i][2])
+            y2 = np.ceil(boxes_2d[i][3])
             det_imgs.append(
                 self.transform(img.crop((x1, y1, x2, y2)).resize((224, 224), Image.BILINEAR)).unsqueeze(0))
 
-        if 'image_idx' in frame['detection'].keys():
-            frame['detection'].pop('image_idx')
-
         det_imgs = torch.cat(det_imgs, dim=0)
         det_points = torch.Tensor(point_cloud['points'])
-        det_boxes = point_cloud['boxes']
+        det_boxes = {'boxes_3d': point_cloud['boxes'], 'boxes_2d': boxes_2d}
         det_points_split = point_cloud['det_lens']
-        ###
-        return det_boxes, det_imgs, det_points, det_points_split, frame['detection']
+        frame_id = frame['detection']['frame_idx']
+
+        return det_imgs, det_points, det_points_split, det_boxes, frame_id
 
     def __len__(self):
         return len(self.metas)

@@ -40,15 +40,15 @@ class Tracker:
                 self.tracks.pop(idx)
         return results
 
-    def update(self, det_boxes, images, points, points_split, detections: dict):
-        cur_frame_idx = int(detections['frame_idx'])
+    def update(self, images, points, points_split, boxes, frame_id):
+        cur_frame_idx = int(frame_id)
         passed_frames = cur_frame_idx - self.last_frame_idx
         self.last_frame_idx = cur_frame_idx
         self.frame_count += passed_frames
-        num_det = len(det_boxes)
+        boxes_3d = boxes['boxes_3d']
+        boxes_2d = boxes['boxes_2d']
+        num_det = len(boxes_3d)
         num_pred = len(self.tracks)
-        alpha = detections['alpha']
-        bbox = detections['bbox']  # 2d bounding box
         # for the first frame
         if num_pred == 0:
             det_lens = []
@@ -57,8 +57,8 @@ class Tracker:
             det_scores, det_features = self.model(images, points, det_lens)
             # add in tracks
             for d in range(num_det):
-                self.tracks.append(Track(det_boxes[d], det_scores[d], feature=det_features[:, :, d],
-                                         info={'alpha': alpha[d], 'bbox': bbox[d]}))
+                self.tracks.append(Track(boxes_3d[d], det_scores[d], feature=det_features[:, :, d],
+                                         info=boxes_2d[d]))
             return self.track_management()
         # get predictions of the current frame.
         pred_boxes = np.empty((num_pred, 7))
@@ -78,7 +78,7 @@ class Tracker:
         det_scores, det_features = self.model(images, points, det_lens)
         link_scores, new_scores, end_scores = self.model.scoring(pred_features, det_features)
         matched, unmatched_dets, tentative_dets = ortools_solve(
-            det_boxes,
+            boxes_3d,
             pred_boxes,
             torch.cat((pred_scores, det_scores)),
             link_scores,
@@ -90,19 +90,19 @@ class Tracker:
         )
         # update matched tracks
         for t, d in matched:
-            self.tracks[t].update_with_feature(det_boxes[d],
+            self.tracks[t].update_with_feature(boxes_3d[d],
                                                det_features[:, :, d],
                                                det_scores[d],
-                                               {'alpha': alpha[d], 'bbox': bbox[d]})
+                                               boxes_2d[d])
         # init new tracks for unmatched detections
         for i in unmatched_dets:
-            trk = Track(bbox=det_boxes[i], feature=det_features[:, :, i],
-                        score=det_scores[i], info={'alpha': alpha[i], 'bbox': bbox[i]})
+            trk = Track(bbox=boxes_3d[i], feature=det_features[:, :, i],
+                        score=det_scores[i], info=boxes_2d[i])
             self.tracks.append(trk)
 
         for i in tentative_dets:
-            trk = Track(bbox=det_boxes[i], feature=det_features[:, :, i],
-                        score=det_scores[i], info={'alpha': alpha[i], 'bbox': bbox[i]})
+            trk = Track(bbox=boxes_3d[i], feature=det_features[:, :, i],
+                        score=det_scores[i], info=boxes_2d[i])
             trk.misses += 1
             self.tracks.append(trk)
         return self.track_management()

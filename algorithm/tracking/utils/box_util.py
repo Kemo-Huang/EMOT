@@ -1,6 +1,7 @@
 import numpy as np
 from numba import njit
 from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
 
 
 @njit
@@ -231,8 +232,8 @@ def distance_iou_kitti(box1, box2):
     corners1 = box_to_corners_kitti(box1)
     corners2 = box_to_corners_kitti(box2)
     # corner points are in counter clockwise order
-    rect1 = [(corners1[i, 0], corners1[i, 1]) for i in range(3, -1, -1)]
-    rect2 = [(corners2[i, 0], corners2[i, 1]) for i in range(3, -1, -1)]
+    rect1 = [(corners1[i, 0], corners1[i, 2]) for i in range(3, -1, -1)]
+    rect2 = [(corners2[i, 0], corners2[i, 2]) for i in range(3, -1, -1)]
     inter_area = convex_hull_intersection(rect1, rect2)
     x_max1, y_max1, z_max1 = np.max(corners1, axis=0)
     x_max2, y_max2, z_max2 = np.max(corners2, axis=0)
@@ -250,9 +251,6 @@ def distance_iou_kitti(box1, box2):
     return iou, 1 - distance
 
 
-from shapely.geometry import Polygon
-
-
 # @njit
 def distance_iou_sustech(psr1, psr2):
     p1 = psr1[:3]
@@ -263,15 +261,10 @@ def distance_iou_sustech(psr1, psr2):
     R2 = euler_angle_to_rotation_matrix(psr2[6:])
     corners1 = np.transpose(psr_to_corners3d(p1, s1, R1))  # 8 * 3
     corners2 = np.transpose(psr_to_corners3d(p2, s2, R2))
-    # # corner points are in counter clockwise order
-    # rect1 = [(corners1[i, 0], corners1[i, 2]) for i in range(3, -1, -1)]
-    # rect2 = [(corners2[i, 0], corners2[i, 2]) for i in range(3, -1, -1)]
-    # inter_area = convex_hull_intersection(rect1, rect2)
 
     rect1 = Polygon(corners1[:4, :2])
     rect2 = Polygon(corners2[:4, :2])
     inter_area = rect1.intersection(rect2).area
-    print(inter_area)
 
     x_max1, y_max1, z_max1 = np.max(corners1, axis=0)
     x_max2, y_max2, z_max2 = np.max(corners2, axis=0)

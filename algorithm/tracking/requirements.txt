@@ -11,3 +11,4 @@ torchvision
 pillow
 motmetrics
 open3d
+shapely

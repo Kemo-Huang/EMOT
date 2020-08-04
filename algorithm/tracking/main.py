@@ -28,26 +28,26 @@ def kitti_mot():
             tracking_module.reset()
             with open(os.path.join(result_dir, f'{sequence.name}.txt'), 'w+') as out:
                 with torch.no_grad():
-                    for (det_boxes, det_images, det_points, det_points_split, detections) in seq_loader:
-                        det_boxes = det_boxes.squeeze(0).numpy()
-                        for box in det_boxes:
+                    for (det_images, det_points, det_points_split, det_boxes, frame_id) in seq_loader:
+                        det_boxes['boxes_2d'] = det_boxes['boxes_2d'][0]
+                        frame_id = frame_id[0]
+                        boxes_3d = det_boxes['boxes_3d'][0]
+                        for box in boxes_3d:
                             # input: x, y, z, l, h, w, yaw
                             # to: x, y, z, yaw, l, w, h
                             box[:] = box[[0, 1, 2, 6, 3, 5, 4]]
                         det_images = det_images.cuda().squeeze(0)
                         det_points = det_points.cuda().squeeze(0)
-                        for k, v in detections.items():
-                            detections[k] = v[0]
                         # compute output
                         end = time.time()
                         results = tracking_module.update(
-                            det_boxes, det_images, det_points, det_points_split, detections)
+                            det_images, det_points, det_points_split, det_boxes, frame_id)
                         runtime_seq += (time.time() - end)
                         num_frames += 1
                         if num_frames % 100 == 0:
                             print(f'Test Frame: [{num_frames}/{len(seq_loader)}]. Time: {runtime_seq}')
 
-                        write_kitti_format(results, detections, out)
+                        write_kitti_format(results, frame_id, out)
 
             print(f"FPS: {num_frames / runtime_seq}")
             total_frames += num_frames
