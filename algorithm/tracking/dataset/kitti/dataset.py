@@ -72,7 +72,7 @@ class SequenceDataset(Dataset):
 
     def __init__(self, name, modality, root_dir, det_frames, transform):
         self.root_dir = root_dir
-        self.metas = det_frames
+        self.meta = det_frames
         self.idx = 0
         self.seq_len = len(det_frames)
         self.name = name
@@ -84,33 +84,30 @@ class SequenceDataset(Dataset):
             self.transform = transform
 
     def __getitem__(self, idx):
-        frame = self.metas[idx]
-        det_imgs = []
-        ###
-        path = f"{self.root_dir}/image_02/{frame['image_path']}"
-        img = Image.open(path)
-        boxes_2d = frame['detection']['bbox']
-        det_num = boxes_2d.shape[0]
+        frame = self.meta[idx]
+        det_images = []
+        img = Image.open(f"{self.root_dir}/image_02/{frame['image_path']}")
         frame['frame_info']['img_shape'] = np.array([img.size[1], img.size[0]])  # w, h -> h, w
         point_cloud = read_and_prep_points(root_path=self.root_dir,
                                            info=frame['frame_info'],
                                            point_path=frame['point_path'],
                                            dets=frame['detection'])
-        for i in range(det_num):
-            x1 = np.floor(boxes_2d[i][0])
-            y1 = np.floor(boxes_2d[i][1])
-            x2 = np.ceil(boxes_2d[i][2])
-            y2 = np.ceil(boxes_2d[i][3])
-            det_imgs.append(
+        boxes_2d = frame['detection']['bbox']
+        for box_2d in boxes_2d:
+            x1 = np.floor(box_2d[0])
+            y1 = np.floor(box_2d[1])
+            x2 = np.ceil(box_2d[2])
+            y2 = np.ceil(box_2d[3])
+            det_images.append(
                 self.transform(img.crop((x1, y1, x2, y2)).resize((224, 224), Image.BILINEAR)).unsqueeze(0))
 
-        det_imgs = torch.cat(det_imgs, dim=0)
+        det_images = torch.cat(det_images, dim=0)
         det_points = torch.Tensor(point_cloud['points'])
         det_boxes = {'boxes_3d': point_cloud['boxes'], 'boxes_2d': boxes_2d}
         det_points_split = point_cloud['det_lens']
         frame_id = frame['detection']['frame_idx']
 
-        return det_imgs, det_points, det_points_split, det_boxes, frame_id
+        return det_images, det_points, det_points_split, det_boxes, frame_id
 
     def __len__(self):
-        return len(self.metas)
+        return len(self.meta)

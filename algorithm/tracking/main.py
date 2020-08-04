@@ -30,7 +30,7 @@ def kitti_mot():
                 with torch.no_grad():
                     for (det_images, det_points, det_points_split, det_boxes, frame_id) in seq_loader:
                         det_boxes['boxes_2d'] = det_boxes['boxes_2d'][0]
-                        boxes_3d = det_boxes['boxes_3d'][0]
+                        boxes_3d = det_boxes['boxes_3d'][0].numpy()
                         for box in boxes_3d:
                             # input: x, y, z, l, h, w, yaw
                             # to: x, y, z, yaw, l, w, h
