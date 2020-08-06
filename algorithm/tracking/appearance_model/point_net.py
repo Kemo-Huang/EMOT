@@ -144,7 +144,6 @@ class PointNetfeatGN(nn.Module):
                 max_feat.repeat(1, 1, i))
             start = end
         max_feats = torch.cat(max_feats, dim=-1)
-        assert max_feats.size(-1) == x.size(-1)
         conv_out.append(max_feats)
 
         return conv_out

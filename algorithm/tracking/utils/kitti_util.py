@@ -644,7 +644,7 @@ def add_miss_dets(prev_dets, dets, iou_threshold=0.2, fix_threshold=2):
     mask = torch.Tensor(mat).sum(dim=-1).eq(0)
     fix_count += mask.float()
     mask ^= fix_count.gt(fix_threshold)
-    index = mask.nonzero().squeeze(0).numpy()
+    index = torch.nonzero(mask, as_tuple=False).squeeze(0).numpy()
 
     if len(index) == 0:
         return dets, 0
