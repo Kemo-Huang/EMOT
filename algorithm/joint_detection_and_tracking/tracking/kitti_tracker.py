@@ -51,7 +51,7 @@ class Tracker:
         self.frame_count += passed_frames
 
         det_features = frame_detections_dict['feature'].cuda()
-        det_scores = self.model.get_cls_scores(det_features)
+        det_scores = torch.from_numpy(frame_detections_dict['score']).cuda()
 
         # for the first frame
         if num_pred == 0:
@@ -64,7 +64,7 @@ class Tracker:
 
         # get predictions of the current frame.
         pred_boxes = np.empty((num_pred, 7), dtype=np.float32)
-        pred_scores = torch.empty((num_pred, 1), dtype=torch.float32)
+        pred_scores = torch.empty(num_pred, dtype=torch.float32)
         pred_features = torch.empty((num_pred, 27648))
         for i, trk in enumerate(self.tracks):
             box, score, feature = trk.predict(passed_frames)

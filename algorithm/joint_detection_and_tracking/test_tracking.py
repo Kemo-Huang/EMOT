@@ -15,7 +15,7 @@ feature_pkl = os.path.join(data_root, 'features.pkl')
 result_pkl = os.path.join(data_root, 'result.pkl')
 link_pkl = os.path.join(data_root, 'link_val.pkl')
 
-ckpt = os.path.join('output_thres_0.3_163', 'ckpt', 'checkpoint_epoch_162.pth')
+ckpt = os.path.join('output', 'train', 'ckpt', 'checkpoint_epoch_42.pth')
 assert os.path.exists(ckpt)
 
 output_root = "output"
@@ -60,7 +60,7 @@ def main():
     model.eval()
     model.cuda()
 
-    car_tracker = hungarian_tracker.Tracker(model, t_miss=4, t_hit=1, w_app=0, w_iou=1, w_loc=0)
+    car_tracker = kitti_tracker.Tracker(model, t_miss=4, t_hit=1, w_app=0, w_iou=1, w_loc=0)
 
     total_time = 0
     total_frames = 0
